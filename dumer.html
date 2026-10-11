@@ -1,0 +1,265 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DuMer Prompt Studio</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 16px;
+  font-family: Arial, sans-serif;
+  background: #101827;
+  color: white;
+}
+header { text-align: center; padding: 16px 0; }
+h1 { color: #55e6ff; margin-bottom: 6px; }
+p { color: #b8c5d8; }
+input, textarea, button {
+  width: 100%;
+  padding: 12px;
+  margin: 6px 0;
+  border-radius: 9px;
+  font-size: 16px;
+}
+input, textarea {
+  background: #1e293b;
+  color: white;
+  border: 1px solid #475569;
+}
+textarea { min-height: 110px; }
+button {
+  border: 0;
+  background: #16c7df;
+  color: #071521;
+  font-weight: bold;
+}
+.card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+.prompt { white-space: pre-wrap; color: #e2e8f0; }
+.actions { display: flex; gap: 8px; }
+.actions button { flex: 1; }
+.delete { background: #fb7185; }
+.edit { background: #fbbf24; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DuMer Prompt Studio</h1>
+  <p>Tempat menyimpan prompt video favoritmu</p>
+</header>
+
+<h3>Tambah / Edit Prompt</h3>
+<input id="use" placeholder="Kegunaan prompt">
+<textarea id="code" placeholder="Tempel kode prompt video di sini"></textarea>
+<button id="saveButton" onclick="savePrompt()">SIMPAN PROMPT</button>
+
+<h3>Keamanan Data Prompt</h3>
+<button onclick="backupPrompts()">CADANGKAN PROMPT</button>
+<button onclick="document.getElementById('restoreFile').click()">PULIHKAN PROMPT</button>
+<input type="file" id="restoreFile" accept=".json,application/json" style="display:none" onchange="restorePrompts(event)">
+
+<h3>Daftar Prompt</h3>
+<input id="search" placeholder="Cari kegunaan atau prompt..."
+oninput="showPrompts()">
+<div id="list"></div>
+
+<script>
+let prompts = [];
+let editing = -1;
+
+try {
+  prompts = JSON.parse(localStorage.getItem("dumerPrompts") || "[]");
+} catch(e) {
+  prompts = [];
+}
+
+function saveData() {
+  try {
+    localStorage.setItem("dumerPrompts", JSON.stringify(prompts));
+    return true;
+  } catch(e) {
+    alert("Penyimpanan gagal. Periksa pengaturan browser.");
+    return false;
+  }
+}
+
+function savePrompt() {
+  const use = document.getElementById("use").value.trim();
+  const code = document.getElementById("code").value.trim();
+
+  if (!use || !code) {
+    alert("Isi kegunaan dan kode prompt terlebih dahulu.");
+    return;
+  }
+
+  const oldPrompts = [...prompts];
+
+  if (editing >= 0) {
+    prompts[editing] = {use, code};
+  } else {
+    prompts.push({use, code});
+  }
+
+  if (!saveData()) {
+    prompts = oldPrompts;
+    return;
+  }
+
+  editing = -1;
+  document.getElementById("use").value = "";
+  document.getElementById("code").value = "";
+  document.getElementById("saveButton").textContent = "SIMPAN PROMPT";
+  showPrompts();
+  alert("Prompt berhasil disimpan!");
+}
+
+function showPrompts() {
+  const q = document.getElementById("search").value.toLowerCase();
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  const found = prompts
+    .map((p, i) => ({...p, index: i}))
+    .filter(p => (p.use + " " + p.code).toLowerCase().includes(q));
+
+  if (!found.length) {
+    list.textContent = "Belum ada prompt yang cocok.";
+    return;
+  }
+
+  found.forEach(p => {
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const title = document.createElement("h3");
+    title.textContent = (p.index + 1) + ". " + p.use;
+    card.appendChild(title);
+
+    const text = document.createElement("div");
+    text.className = "prompt";
+    text.textContent = p.code;
+    card.appendChild(text);
+
+    const copy = document.createElement("button");
+    copy.textContent = "COPY PROMPT";
+    copy.onclick = () => copyPrompt(p.code);
+    card.appendChild(copy);
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+
+    const edit = document.createElement("button");
+    edit.className = "edit";
+    edit.textContent = "EDIT";
+    edit.onclick = () => {
+      editing = p.index;
+      document.getElementById("use").value = p.use;
+      document.getElementById("code").value = p.code;
+      document.getElementById("saveButton").textContent = "PERBARUI PROMPT";
+      window.scrollTo(0, 0);
+    };
+
+    const del = document.createElement("button");
+    del.className = "delete";
+    del.textContent = "HAPUS";
+    del.onclick = () => {
+      if (confirm("Yakin ingin menghapus prompt ini?")) {
+        const oldPrompts = [...prompts];
+        prompts.splice(p.index, 1);
+        if (!saveData()) prompts = oldPrompts;
+        showPrompts();
+      }
+    };
+
+    actions.append(edit, del);
+    card.appendChild(actions);
+    list.appendChild(card);
+  });
+}
+
+async function copyPrompt(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    alert("Prompt berhasil disalin!");
+  } catch(e) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    alert(ok ? "Prompt berhasil disalin!" :
+      "Gagal menyalin. Tekan lama teks prompt lalu pilih Salin.");
+  }
+}
+
+function backupPrompts() {
+  const data = JSON.stringify(prompts, null, 2);
+  const blob = new Blob([data], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "cadangan-dumer.json";
+  a.click();
+  URL.revokeObjectURL(url);
+  alert("Cadangan prompt dibuat. Periksa folder Download.");
+}
+
+function restorePrompts(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function() {
+    try {
+      const data = JSON.parse(reader.result);
+
+      if (!Array.isArray(data) ||
+          !data.every(p =>
+            p &&
+            typeof p.use === "string" &&
+            typeof p.code === "string"
+          )) {
+        throw new Error("Format file tidak sesuai");
+      }
+
+      if (!confirm(
+        "Pulihkan " + data.length +
+        " prompt? Prompt saat ini akan diganti."
+      )) return;
+
+      const oldPrompts = prompts;
+      prompts = data;
+
+      if (saveData()) {
+        showPrompts();
+        alert("Prompt berhasil dipulihkan!");
+      } else {
+        prompts = oldPrompts;
+      }
+    } catch (e) {
+      alert("File cadangan tidak valid atau rusak.");
+    }
+
+    event.target.value = "";
+  };
+
+  reader.readAsText(file);
+}
+
+showPrompts();
+</script>
+</body>
+</html>
